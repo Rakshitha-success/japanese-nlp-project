@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sudachipy
+sudachidict_core
+scikit-learn
+pandas
+numpy
+transformers
+torch
+joblib
