@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { MessageSquare, Activity, BarChart3, AlertCircle,Volume2 } from "lucide-react";
+import { MessageSquare, Activity, BarChart3, AlertCircle, Volume2, Cpu } from "lucide-react";
 
 function App() {
   const [text, setText] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  // 1. Added state for the selected model
+  const [modelType, setModelType] = useState("bert"); 
 
   const examples = [
     "この映画は最高でした！本当に良い作品です。",
@@ -14,6 +17,7 @@ function App() {
     "「このペンは黒色で、インクは半分残っています。」"
   ];
 
+  // 2. Added modelType to the dependency array so switching models re-runs analysis
   useEffect(() => {
     if (!text.trim()) {
       setResult(null);
@@ -26,20 +30,21 @@ function App() {
     }, 600);
 
     return () => clearTimeout(delay);
-  }, [text]);
+  }, [text, modelType]); 
 
   const speakTranslation = (text) => {
-    window.speechSynthesis.cancel(); // Stops any currently playing audio
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US"; // Forces an English accent
-    utterance.rate = 0.9;     // Slightly slower for better pronunciation
+    utterance.lang = "en-US";
+    utterance.rate = 0.9;
     window.speechSynthesis.speak(utterance);
   };
+
   const speakJapanese = (textToSpeak) => {
-    if (!textToSpeak.trim()) return; // Don't try to speak if the box is empty
+    if (!textToSpeak.trim()) return;
     window.speechSynthesis.cancel(); 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.lang = "ja-JP"; // <-- This forces the native Japanese voice!
+    utterance.lang = "ja-JP"; 
     utterance.rate = 0.9;     
     window.speechSynthesis.speak(utterance);
   };
@@ -49,20 +54,18 @@ function App() {
       setLoading(true);
       setError("");
       
-      // 1. Send the exact format the FastAPI backend expects
+      // 3. Update the API call to use the selected modelType
       const res = await axios.post("http://localhost:8000/predict", { 
         text: input,
-        model: "bert", 
+        model: modelType, 
         use_preprocessing: true
       });
 
       const apiData = res.data;
 
-      // 2. Format the sentiment text so it matches our colors perfectly
       const rawPrediction = apiData.prediction || "Neutral";
       const formattedSentiment = rawPrediction.charAt(0).toUpperCase() + rawPrediction.slice(1).toLowerCase();
 
-      // 3. Combine her tokens array and pos_tags array for the UI
       let formattedTokens = [];
       if (apiData.tokens && apiData.pos_tags) {
         formattedTokens = apiData.tokens.map((word, index) => ({
@@ -70,8 +73,9 @@ function App() {
           pos: apiData.pos_tags[index] || "N/A"
         }));
       }
-     console.log("BACKEND DATA CHECK:", apiData);
-      // 4. Set the result!
+      
+      console.log("BACKEND DATA CHECK:", apiData);
+      
       setResult({
         sentiment: formattedSentiment,
         confidence: apiData.confidence,
@@ -109,7 +113,7 @@ function App() {
           Gengo Rikai
         </h1>
         <p className="text-slate-400 text-lg max-w-2xl">
-          Advanced sentiment classification and morphological tokenization  by SudachiPy.
+          Advanced sentiment classification and morphological tokenization by SudachiPy.
         </p>
       </header>
 
@@ -120,7 +124,37 @@ function App() {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
             
-           <div className="flex justify-between items-center mb-4">
+            {/* 4. Added Model Selection Toggle */}
+            <div className="mb-6 pb-6 border-b border-slate-800">
+              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Cpu size={16} />
+                Select Model
+              </h3>
+              <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+                <button
+                  onClick={() => setModelType("bert")}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                    modelType === "bert" 
+                      ? "bg-slate-800 text-indigo-400 shadow-sm" 
+                      : "text-slate-500 hover:text-slate-300 hover:bg-slate-900"
+                  }`}
+                >
+                  BERT
+                </button>
+                <button
+                  onClick={() => setModelType("tfidf")}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                    modelType === "tfidf" 
+                      ? "bg-slate-800 text-indigo-400 shadow-sm" 
+                      : "text-slate-500 hover:text-slate-300 hover:bg-slate-900"
+                  }`}
+                >
+                  TF-IDF
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <MessageSquare size={20} className="text-indigo-400"/>
                 Source Text
@@ -161,14 +195,18 @@ function App() {
           </div>
         </div> 
 
-
-
         {/* Right Output Section */}
         <div className="lg:col-span-7">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl min-h-[500px] flex flex-col">
             <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
               <Activity size={20} className="text-indigo-400"/>
               Real-time Inference
+              {/* Added a subtle indicator of which model is currently running the results */}
+              {result && !loading && (
+                <span className="ml-auto text-xs font-mono bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded">
+                  via {modelType.toUpperCase()}
+                </span>
+              )}
             </h2>
 
             {!result && !loading && !error && (
@@ -181,7 +219,7 @@ function App() {
             {loading && (
               <div className="flex-grow flex flex-col items-center justify-center space-y-4">
                 <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-                <p className="text-indigo-400 font-medium animate-pulse">Running BERT Inference...</p>
+                <p className="text-indigo-400 font-medium animate-pulse">Running {modelType.toUpperCase()} Inference...</p>
               </div>
             )}
 
@@ -221,24 +259,29 @@ function App() {
                     </div>
                   </div>
                 </div>
-                <div className="bg-slate-950 rounded-xl p-5 border border-slate-800 flex justify-between items-center gap-4">
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">
-                      English Translation
-                    </h3>
-                    <p className="text-lg text-slate-200 font-medium">
-                      {result.translation}
-                    </p>
+                
+                {/* Only render translation block if the backend actually returns it for both models */}
+                {result.translation && (
+                  <div className="bg-slate-950 rounded-xl p-5 border border-slate-800 flex justify-between items-center gap-4">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">
+                        English Translation
+                      </h3>
+                      <p className="text-lg text-slate-200 font-medium">
+                        {result.translation}
+                      </p>
+                    </div>
+                    
+                    <button
+                      onClick={() => speakTranslation(result.translation)}
+                      className="p-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-full transition-colors shrink-0 shadow-sm"
+                      title="Listen to Translation"
+                    >
+                      <Volume2 size={24} />
+                    </button>
                   </div>
-                  
-                  <button
-                    onClick={() => speakTranslation(result.translation)}
-                    className="p-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-full transition-colors shrink-0 shadow-sm"
-                    title="Listen to Translation"
-                  >
-                    <Volume2 size={24} />
-                  </button>
-                </div>
+                )}
+                
                 <div>
                   <h3 className="text-sm font-bold text-slate-400 tracking-widest uppercase mb-4">
                     Morphological Tokenization
